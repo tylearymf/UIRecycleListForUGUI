@@ -167,7 +167,7 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
                     distance = pos.x - center.x;
                     int realIndex = Mathf.RoundToInt(pos.x / itemWidgetSize);
 
-                    if (minIndex == maxIndex || (minIndex <= realIndex && realIndex <= maxIndex))
+                    if (minIndex == maxIndex || (minIndex <= realIndex && realIndex < maxIndex))
                     {
                         t.localPosition = pos;
                         UpdateItem(t, i);
@@ -180,7 +180,7 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
                     distance = pos.x - center.x;
                     int realIndex = Mathf.RoundToInt(pos.x / itemWidgetSize);
 
-                    if (minIndex == maxIndex || (minIndex <= realIndex && realIndex <= maxIndex))
+                    if (minIndex == maxIndex || (minIndex <= realIndex && realIndex < maxIndex))
                     {
                         t.localPosition = pos;
                         UpdateItem(t, i);
@@ -211,7 +211,7 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
                     distance = pos.y - center.y;
                     int realIndex = Mathf.RoundToInt(pos.y / -itemWidgetSize);
 
-                    if (minIndex == maxIndex || (minIndex <= realIndex && realIndex <= maxIndex))
+                    if (minIndex == maxIndex || (minIndex <= realIndex && realIndex < maxIndex))
                     {
                         t.localPosition = pos;
                         UpdateItem(t, i);
@@ -224,7 +224,7 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
                     distance = pos.y - center.y;
                     int realIndex = Mathf.RoundToInt(pos.y / -itemWidgetSize);
 
-                    if (minIndex == maxIndex || (minIndex <= realIndex && realIndex <= maxIndex))
+                    if (minIndex == maxIndex || (minIndex <= realIndex && realIndex < maxIndex))
                     {
                         t.localPosition = pos;
                         UpdateItem(t, i);
@@ -282,11 +282,11 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
 
         if (mHorizontal)
         {
-            tContent.sizeDelta = new Vector2(itemWidgetSize * (maxIndex + 1), tContent.sizeDelta.y);
+            tContent.sizeDelta = new Vector2(itemWidgetSize * maxIndex, tContent.sizeDelta.y);
         }
         else
         {
-            tContent.sizeDelta = new Vector2(tContent.sizeDelta.x, itemWidgetSize * (maxIndex + 1));
+            tContent.sizeDelta = new Vector2(tContent.sizeDelta.x, itemWidgetSize * maxIndex);
         }
     }
 

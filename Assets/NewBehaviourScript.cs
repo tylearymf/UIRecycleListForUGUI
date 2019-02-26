@@ -11,17 +11,17 @@ public class NewBehaviourScript : MonoBehaviour
 
     private void Start()
     {
-        for (int i = 0; i < 7; i++)
+        for (int i = 0; i < 5; i++)
         {
             NGUITools.AddChild(test.gameObject, prefab);
         }
 
         test.onUpdateItem = OnUpdateItem;
-        test.UpdateCount(50);
+        test.UpdateCount(13);
     }
 
-    private void OnUpdateItem(GameObject go, int wrapIndex, int realIndex)
+    public void OnUpdateItem(GameObject pGameObject, int pItemIndex, int pDataIndex)
     {
-        go.GetComponentInChildren<Text>().text = realIndex.ToString();
+        pGameObject.GetComponentInChildren<Text>().text = pDataIndex.ToString();
     }
 }
