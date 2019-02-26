@@ -7,8 +7,26 @@ using UnityEngine.UI;
 /// <summary>
 /// + Scroll Rect
 /// |- ViewPort
+///             RectTransform
+///             Anchor Presets:stretch,stretch
+///             Left:0 Top:0 PosZ:0 Right:0 Bottom:0
+///             Anchors Min:0,0 Max:1,1 Pivot:0.5,0.5
+///             Rotation:0,0,0 Scale:1,1,1
+/// 
 /// |-- Content
+///             RectTransform
+///             Anchor Presets:top,center
+///             PosX:0 PosY:0 PosZ:0 Width:ScrollRect'Width Height:ScrollRect'Height
+///             Anchors Min:0.5,1 Max:0.5,1 Pivot:0.5,1
+///             Rotation:0,0,0 Scale:1,1,1
+/// 
 /// |--- ItemContainer
+///             RectTransform
+///             Anchor Presets:top,center
+///             PosX:Custom PosY:Custom PosZ:0 Width:ScrollRect'Width Height:ScrollRect'Height
+///             Anchors Min:0.5,1 Max:0.5,1 Pivot:0.5,1
+///             Rotation:0,0,0 Scale:1,1,1
+/// 
 /// |---- Item 1
 /// |---- Item 2
 /// |---- Item 3
