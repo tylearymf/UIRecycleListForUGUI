@@ -3,6 +3,10 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
+
 
 /// <summary>
 /// + Scroll Rect
@@ -13,14 +17,14 @@ using UnityEngine.UI;
 ///             Anchors Min:0,0 Max:1,1 Pivot:0.5,0.5
 ///             Rotation:0,0,0 Scale:1,1,1
 /// 
-/// |-- Content
+/// |-- Content (有且只有一个组件：RectTransform)
 ///             RectTransform
 ///             Anchor Presets:top,center
 ///             PosX:0 PosY:0 PosZ:0 Width:ScrollRect'Width Height:ScrollRect'Height
 ///             Anchors Min:0.5,1 Max:0.5,1 Pivot:0.5,1
 ///             Rotation:0,0,0 Scale:1,1,1
 /// 
-/// |--- ItemContainer
+/// |--- ItemContainer (包含UIRecycleListForUGUI组件)
 ///             RectTransform
 ///             Anchor Presets:top,center
 ///             PosX:Custom PosY:Custom PosZ:0 Width:ScrollRect'Width Height:ScrollRect'Height
@@ -318,3 +322,53 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
     static public int SortHorizontal(Transform a, Transform b) { return a.localPosition.x.CompareTo(b.localPosition.x); }
     static public int SortVertical(Transform a, Transform b) { return b.localPosition.y.CompareTo(a.localPosition.y); }
 }
+
+
+#if UNITY_EDITOR
+[CustomEditor(typeof(UIRecycleListForUGUI))]
+class UIRecycleListForUGUIEditor : Editor
+{
+    public override void OnInspectorGUI()
+    {
+        base.OnInspectorGUI();
+
+        var tRecycleList = target as UIRecycleListForUGUI;
+
+        if (GUILayout.Button("初始化配置"))
+        {
+            var tScrollRect = tRecycleList.transform.parent.parent.parent.GetComponent<ScrollRect>();
+            var tScrollRectSize = tScrollRect.GetComponent<RectTransform>().sizeDelta;
+
+            tRecycleList.transform.name = "ItemContainer";
+            var tItemContainer = tRecycleList.GetComponent<RectTransform>() ?? tRecycleList.gameObject.AddComponent<RectTransform>();
+            tItemContainer.anchorMin = new Vector2(0.5F, 1);
+            tItemContainer.anchorMax = new Vector2(0.5F, 1);
+            tItemContainer.pivot = new Vector2(0.5F, 1);
+            tItemContainer.rotation = Quaternion.identity;
+            tItemContainer.localScale = Vector3.one;
+            tItemContainer.localPosition = Vector3.zero;
+            tItemContainer.sizeDelta = tScrollRectSize;
+
+
+            var tContent = tItemContainer.parent.GetComponent<RectTransform>();
+            tContent.anchorMin = new Vector2(0.5F, 1);
+            tContent.anchorMax = new Vector2(0.5F, 1);
+            tContent.pivot = new Vector2(0.5F, 1);
+            tContent.rotation = Quaternion.identity;
+            tContent.localScale = Vector3.one;
+            tContent.localPosition = Vector3.zero;
+            tContent.sizeDelta = tScrollRectSize;
+
+
+            var tViewPort = tContent.parent.GetComponent<RectTransform>();
+            tViewPort.anchorMin = Vector2.zero;
+            tViewPort.anchorMax = Vector2.one;
+            tViewPort.pivot = Vector2.one * 0.5F;
+            tViewPort.rotation = Quaternion.identity;
+            tViewPort.localScale = Vector3.one;
+            tViewPort.localPosition = Vector3.zero;
+            tViewPort.sizeDelta = Vector2.zero;
+        }
+    }
+}
+#endif
