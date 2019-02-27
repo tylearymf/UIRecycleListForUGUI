@@ -37,24 +37,54 @@ using UnityEditor;
 /// </summary>
 public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
 {
+    public enum LayoutType
+    {
+        /// <summary>
+        /// 单列
+        /// </summary>
+        SingleColumn,
+        /// <summary>
+        /// 多列
+        /// </summary>
+        MultiColumn,
+    }
+
     public delegate void OnUpdateItem(GameObject pGameObject, int pItemIndex, int pDataIndex);
 
-    [Tooltip("Item的宽或高")]
     /// <summary>
-    /// Item的宽或高
+    /// 竖向滑动时是列数/横向滑动时是行数
     /// </summary>
-    public int itemWidgetSize = 100;
+    [Tooltip("竖向滑动时是列数/横向滑动时是行数")]
+    [HideInInspector]
+    [Range(1, 20)]
+    public int columnOrRowCount = 1;
 
-    [Tooltip("是否隐藏未处于可视区域的Item")]
+    /// <summary>
+    /// Item的宽度
+    /// </summary>
+    [Tooltip("Item的宽度（包含间隔）")]
+    [HideInInspector]
+    public int itemWidth = 100;
+
+    /// <summary>
+    /// Item的高度
+    /// </summary>
+    [Tooltip("Item的高度（包含间隔）")]
+    [HideInInspector]
+    public int itemHeight = 100;
+
     /// <summary>
     /// 是否隐藏未处于可视区域的Item
     /// </summary>
+    [Tooltip("是否隐藏未处于可视区域的Item")]
+    [HideInInspector]
     public bool cullContent = true;
 
-    [Tooltip("是否忽略隐藏的Item")]
     /// <summary>
     /// 是否忽略隐藏的Item
     /// </summary>
+    [Tooltip("是否忽略隐藏的Item")]
+    [HideInInspector]
     public bool hideInactive = false;
 
     public OnUpdateItem onUpdateItem;
@@ -67,6 +97,17 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
     protected bool mFirstTime = true;
     protected List<Transform> mChildren = new List<Transform>();
     protected Vector3[] mCorners = new Vector3[4];
+
+    /// <summary>
+    /// 布局模式
+    /// </summary>
+    LayoutType layoutType
+    {
+        get
+        {
+            return columnOrRowCount > 1 ? LayoutType.MultiColumn : LayoutType.SingleColumn;
+        }
+    }
 
     protected virtual void Start()
     {
@@ -82,15 +123,11 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
 
     protected virtual void OnMove(Vector2 delta) { WrapContent(); }
 
-    /// <summary>
-    /// Immediately reposition all children.
-    /// </summary>
     [ContextMenu("Sort Based on Scroll Movement")]
     public virtual void SortBasedOnScrollMovement()
     {
         if (!CacheScrollView()) return;
 
-        // Cache all children and place them in order
         mChildren.Clear();
         for (int i = 0; i < mTrans.childCount; ++i)
         {
@@ -99,21 +136,16 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
             mChildren.Add(t);
         }
 
-        // Sort the list of children so that they are in order
         if (mHorizontal) mChildren.Sort(SortHorizontal);
         else mChildren.Sort(SortVertical);
         ResetChildPositions();
     }
 
-    /// <summary>
-    /// Immediately reposition all children, sorting them alphabetically.
-    /// </summary>
     [ContextMenu("Sort Alphabetically")]
     public virtual void SortAlphabetically()
     {
         if (!CacheScrollView()) return;
 
-        // Cache all children and place them in order
         mChildren.Clear();
         for (int i = 0; i < mTrans.childCount; ++i)
         {
@@ -122,16 +154,13 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
             mChildren.Add(t);
         }
 
-        // Sort the list of children so that they are in order
         mChildren.Sort(SortByName);
         ResetChildPositions();
     }
 
-    /// <summary>
-    /// Cache the scroll view and return 'false' if the scroll view is not found.
-    /// </summary>
     protected bool CacheScrollView()
     {
+        if (mTrans && mScroll) return true;
         mTrans = transform;
         mScroll = gameObject == null ? null : gameObject.GetComponentInParent<ScrollRect>();
         if (mScroll == null) return false;
@@ -141,130 +170,228 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
         return true;
     }
 
-    /// <summary>
-    /// Helper function that resets the position of all the children.
-    /// </summary>
     protected virtual void ResetChildPositions()
     {
         for (int i = 0, imax = mChildren.Count; i < imax; ++i)
         {
             Transform t = mChildren[i];
-            t.localPosition = mHorizontal ? new Vector3(i * itemWidgetSize, 0f, 0f) : new Vector3(0f, -i * itemWidgetSize, 0f);
+            switch (layoutType)
+            {
+                case LayoutType.SingleColumn:
+                    t.localPosition = mHorizontal ? new Vector3(i * itemWidth, 0f, 0f) : new Vector3(0f, -i * itemHeight, 0f);
+                    break;
+                case LayoutType.MultiColumn:
+                    t.localPosition = mHorizontal ? new Vector3((i / columnOrRowCount) * itemWidth, -(i % columnOrRowCount) * itemHeight, 0) : new Vector3((i % columnOrRowCount) * itemWidth, -(i / columnOrRowCount) * itemHeight, 0f); ; ;
+                    break;
+                default:
+                    throw new NotImplementedException("未实现");
+            }
             UpdateItem(t, i);
         }
     }
 
-    /// <summary>
-    /// Wrap all content, repositioning all children as needed.
-    /// </summary>
-    public virtual void WrapContent()
+    protected virtual void WrapContent()
     {
-        float extents = itemWidgetSize * mChildren.Count * 0.5f;
+        var tItemSize = mHorizontal ? itemWidth : itemHeight;
         mScroll.viewport.GetWorldCorners(mCorners);
-
         for (int i = 0; i < 4; ++i)
         {
-            Vector3 v = mCorners[i];
+            var v = mCorners[i];
             v = mScroll.viewport.InverseTransformPoint(v);
             mCorners[i] = v;
         }
+        var tCenter = Vector3.Lerp(mCorners[0], mCorners[2], 0.5f);
 
-        Vector3 center = Vector3.Lerp(mCorners[0], mCorners[2], 0.5f);
-        float ext2 = extents * 2f;
-
-        if (mHorizontal)
+        if (layoutType == LayoutType.MultiColumn)
         {
-            float min = mCorners[0].x - itemWidgetSize;
-            float max = mCorners[2].x + itemWidgetSize;
+            var tExtents = tItemSize * Mathf.CeilToInt(mChildren.Count / (float)columnOrRowCount) * 0.5F;
+            var tExt2 = tExtents * 2f;
 
-            for (int i = 0, imax = mChildren.Count; i < imax; ++i)
+            if (mHorizontal)
             {
-                Transform t = mChildren[i];
-                float distance = t.localPosition.x - center.x + mScroll.content.localPosition.x;
+                var min = mCorners[0].x - tItemSize;
+                var max = mCorners[2].x + tItemSize;
 
-                if (distance < -extents)
+                for (int i = 0, imax = mChildren.Count; i < imax; ++i)
                 {
-                    Vector3 pos = t.localPosition;
-                    pos.x += ext2;
-                    distance = pos.x - center.x;
-                    int realIndex = Mathf.RoundToInt(pos.x / itemWidgetSize);
+                    Transform t = mChildren[i];
+                    float distance = t.localPosition.x - tCenter.x + mScroll.content.localPosition.x;
 
-                    if (minIndex == maxIndex || (minIndex <= realIndex && realIndex < maxIndex))
+                    if (distance < -tExtents)
                     {
-                        t.localPosition = pos;
-                        UpdateItem(t, i);
+                        Vector3 pos = t.localPosition;
+                        pos.x += tExt2;
+                        distance = pos.x - tCenter.x;
+                        var tDataIndex = Mathf.RoundToInt(-pos.y / itemHeight) + Mathf.RoundToInt(pos.x / itemWidth) * columnOrRowCount;
+
+                        if (minIndex == maxIndex || (minIndex <= tDataIndex && tDataIndex < maxIndex))
+                        {
+                            t.localPosition = pos;
+                            UpdateItem(t, i);
+                        }
+                    }
+                    else if (distance > tExtents)
+                    {
+                        Vector3 pos = t.localPosition;
+                        pos.x -= tExt2;
+                        distance = pos.x - tCenter.x;
+                        var tDataIndex = Mathf.RoundToInt(-pos.y / itemHeight) + Mathf.RoundToInt(pos.x / itemWidth) * columnOrRowCount;
+
+                        if (minIndex == maxIndex || (minIndex <= tDataIndex && tDataIndex < maxIndex))
+                        {
+                            t.localPosition = pos;
+                            UpdateItem(t, i);
+                        }
+                    }
+                    else if (mFirstTime) UpdateItem(t, i);
+
+                    if (cullContent)
+                    {
+                        NGUITools.SetActive(t.gameObject, (distance > min && distance < max), false);
                     }
                 }
-                else if (distance > extents)
-                {
-                    Vector3 pos = t.localPosition;
-                    pos.x -= ext2;
-                    distance = pos.x - center.x;
-                    int realIndex = Mathf.RoundToInt(pos.x / itemWidgetSize);
+            }
+            else
+            {
+                var min = mCorners[0].y - tItemSize;
+                var max = mCorners[2].y + tItemSize;
 
-                    if (minIndex == maxIndex || (minIndex <= realIndex && realIndex < maxIndex))
+                for (int i = 0, imax = mChildren.Count; i < imax; ++i)
+                {
+                    Transform t = mChildren[i];
+                    float distance = t.localPosition.y - tCenter.y + mScroll.content.localPosition.y;
+
+                    if (distance < -tExtents)
                     {
-                        t.localPosition = pos;
-                        UpdateItem(t, i);
-                    }
-                }
-                else if (mFirstTime) UpdateItem(t, i);
+                        Vector3 pos = t.localPosition;
+                        pos.y += tExt2;
+                        distance = pos.y - tCenter.y;
+                        var tDataIndex = Mathf.RoundToInt(pos.x / itemWidth) + Mathf.RoundToInt(-pos.y / itemHeight) * columnOrRowCount;
 
-                if (cullContent)
-                {
-                    NGUITools.SetActive(t.gameObject, (distance > min && distance < max), false);
+                        if (minIndex == maxIndex || (minIndex <= tDataIndex && tDataIndex < maxIndex))
+                        {
+                            t.localPosition = pos;
+                            UpdateItem(t, i);
+                        }
+                    }
+                    else if (distance > tExtents)
+                    {
+                        Vector3 pos = t.localPosition;
+                        pos.y -= tExt2;
+                        distance = pos.y - tCenter.y;
+                        var tDataIndex = Mathf.RoundToInt(pos.x / itemWidth) + Mathf.RoundToInt(-pos.y / itemHeight) * columnOrRowCount;
+
+                        if (minIndex == maxIndex || (minIndex <= tDataIndex && tDataIndex < maxIndex))
+                        {
+                            t.localPosition = pos;
+                            UpdateItem(t, i);
+                        }
+                    }
+                    else if (mFirstTime) UpdateItem(t, i);
+
+                    if (cullContent)
+                    {
+                        NGUITools.SetActive(t.gameObject, (distance > min && distance < max), false);
+                    }
                 }
             }
         }
-        else
+        else if (layoutType == LayoutType.SingleColumn)
         {
-            float min = mCorners[0].y - itemWidgetSize;
-            float max = mCorners[2].y + itemWidgetSize;
+            float extents = tItemSize * mChildren.Count * 0.5f;
+            float ext2 = extents * 2f;
 
-            for (int i = 0, imax = mChildren.Count; i < imax; ++i)
+            if (mHorizontal)
             {
-                Transform t = mChildren[i];
-                float distance = t.localPosition.y - center.y + mScroll.content.localPosition.y;
+                float min = mCorners[0].x - tItemSize;
+                float max = mCorners[2].x + tItemSize;
 
-                if (distance < -extents)
+                for (int i = 0, imax = mChildren.Count; i < imax; ++i)
                 {
-                    Vector3 pos = t.localPosition;
-                    pos.y += ext2;
-                    distance = pos.y - center.y;
-                    int realIndex = Mathf.RoundToInt(pos.y / -itemWidgetSize);
+                    Transform t = mChildren[i];
+                    float distance = t.localPosition.x - tCenter.x + mScroll.content.localPosition.x;
 
-                    if (minIndex == maxIndex || (minIndex <= realIndex && realIndex < maxIndex))
+                    if (distance < -extents)
                     {
-                        t.localPosition = pos;
-                        UpdateItem(t, i);
+                        Vector3 pos = t.localPosition;
+                        pos.x += ext2;
+                        distance = pos.x - tCenter.x;
+                        int realIndex = Mathf.RoundToInt(pos.x / tItemSize);
+
+                        if (minIndex == maxIndex || (minIndex <= realIndex && realIndex < maxIndex))
+                        {
+                            t.localPosition = pos;
+                            UpdateItem(t, i);
+                        }
+                    }
+                    else if (distance > extents)
+                    {
+                        Vector3 pos = t.localPosition;
+                        pos.x -= ext2;
+                        distance = pos.x - tCenter.x;
+                        int realIndex = Mathf.RoundToInt(pos.x / tItemSize);
+
+                        if (minIndex == maxIndex || (minIndex <= realIndex && realIndex < maxIndex))
+                        {
+                            t.localPosition = pos;
+                            UpdateItem(t, i);
+                        }
+                    }
+                    else if (mFirstTime) UpdateItem(t, i);
+
+                    if (cullContent)
+                    {
+                        NGUITools.SetActive(t.gameObject, (distance > min && distance < max), false);
                     }
                 }
-                else if (distance > extents)
-                {
-                    Vector3 pos = t.localPosition;
-                    pos.y -= ext2;
-                    distance = pos.y - center.y;
-                    int realIndex = Mathf.RoundToInt(pos.y / -itemWidgetSize);
+            }
+            else
+            {
+                float min = mCorners[0].y - tItemSize;
+                float max = mCorners[2].y + tItemSize;
 
-                    if (minIndex == maxIndex || (minIndex <= realIndex && realIndex < maxIndex))
+                for (int i = 0, imax = mChildren.Count; i < imax; ++i)
+                {
+                    Transform t = mChildren[i];
+                    float distance = t.localPosition.y - tCenter.y + mScroll.content.localPosition.y;
+
+                    if (distance < -extents)
                     {
-                        t.localPosition = pos;
-                        UpdateItem(t, i);
-                    }
-                }
-                else if (mFirstTime) UpdateItem(t, i);
+                        Vector3 pos = t.localPosition;
+                        pos.y += ext2;
+                        distance = pos.y - tCenter.y;
+                        int realIndex = Mathf.RoundToInt(pos.y / -tItemSize);
 
-                if (cullContent)
-                {
-                    NGUITools.SetActive(t.gameObject, (distance > min && distance < max), false);
+                        if (minIndex == maxIndex || (minIndex <= realIndex && realIndex < maxIndex))
+                        {
+                            t.localPosition = pos;
+                            UpdateItem(t, i);
+                        }
+                    }
+                    else if (distance > extents)
+                    {
+                        Vector3 pos = t.localPosition;
+                        pos.y -= ext2;
+                        distance = pos.y - tCenter.y;
+                        int realIndex = Mathf.RoundToInt(pos.y / -tItemSize);
+
+                        if (minIndex == maxIndex || (minIndex <= realIndex && realIndex < maxIndex))
+                        {
+                            t.localPosition = pos;
+                            UpdateItem(t, i);
+                        }
+                    }
+                    else if (mFirstTime) UpdateItem(t, i);
+
+                    if (cullContent)
+                    {
+                        NGUITools.SetActive(t.gameObject, (distance > min && distance < max), false);
+                    }
                 }
             }
         }
     }
 
-    /// <summary>
-    /// Sanity checks.
-    /// </summary>
     void OnValidate()
     {
         if (maxIndex < minIndex)
@@ -273,28 +400,91 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
             maxIndex = minIndex;
     }
 
-    /// <summary>
-    /// Want to update the content of items as they are scrolled? Override this function.
-    /// </summary>
     protected virtual void UpdateItem(Transform pTrans, int pItemIndex)
     {
-        if (onUpdateItem != null)
+        if (onUpdateItem == null) return;
+
+        int tDataIndex = 0;
+        switch (layoutType)
         {
-            int tDataIndex = (mScroll.vertical) ?
-                Mathf.RoundToInt(pTrans.localPosition.y / -itemWidgetSize) :
-                Mathf.RoundToInt(pTrans.localPosition.x / itemWidgetSize);
-            onUpdateItem(pTrans.gameObject, pItemIndex, tDataIndex);
+            case LayoutType.SingleColumn:
+                tDataIndex = mHorizontal ? Mathf.RoundToInt(pTrans.localPosition.x / itemWidth) : Mathf.RoundToInt(pTrans.localPosition.y / -itemHeight);
+                break;
+            case LayoutType.MultiColumn:
+                if (mHorizontal)
+                {
+                    tDataIndex = Mathf.RoundToInt(-pTrans.localPosition.y / itemHeight) + Mathf.RoundToInt(pTrans.localPosition.x / itemWidth) * columnOrRowCount;
+                }
+                else
+                {
+                    tDataIndex = Mathf.RoundToInt(pTrans.localPosition.x / itemWidth) + Mathf.RoundToInt(-pTrans.localPosition.y / itemHeight) * columnOrRowCount;
+                }
+                break;
+            default:
+                throw new NotImplementedException("未实现");
         }
+        onUpdateItem(pTrans.gameObject, pItemIndex, tDataIndex);
     }
 
-    internal void UpdateCount(int pItemCount, bool pReset = false)
+    /// <summary>
+    /// 计算要实例化的Item数量
+    /// </summary>
+    /// <returns></returns>
+    public int CaclculateInstantiateCount()
+    {
+        if (!CacheScrollView())
+        {
+            throw new NotImplementedException("获取ScrollRect组件失败");
+        }
+
+        var tSize = mScroll.GetComponent<RectTransform>().sizeDelta;
+        var tCount = 0;
+
+        switch (layoutType)
+        {
+            case LayoutType.SingleColumn:
+                if (mHorizontal)
+                {
+                    tCount = Mathf.CeilToInt(tSize.x / itemWidth);
+                }
+                else
+                {
+                    tCount = Mathf.CeilToInt(tSize.y / itemHeight);
+                }
+                //多生成两个
+                return tCount + 2;
+            case LayoutType.MultiColumn:
+                if (mHorizontal)
+                {
+                    //多生成两列
+                    tCount = (Mathf.CeilToInt(tSize.x / itemWidth) + 2) * columnOrRowCount;
+                }
+                else
+                {
+                    //多生成两行
+                    tCount = (Mathf.CeilToInt(tSize.y / itemHeight) + 2) * columnOrRowCount;
+                }
+                break;
+            default:
+                throw new NotImplementedException("未实现");
+        }
+
+        return tCount;
+    }
+
+    /// <summary>
+    /// 刷新页面
+    /// </summary>
+    /// <param name="pItemCount">传入总数量</param>
+    /// <param name="pResetPos">是否重置ScrollRect的位置</param>
+    public void UpdateCount(int pItemCount, bool pResetPos = false)
     {
         minIndex = 0;
         maxIndex = pItemCount;
         SortBasedOnScrollMovement();
         WrapContent();
 
-        if (pReset && mScroll)
+        if (pResetPos && mScroll)
         {
             if (mHorizontal) mScroll.horizontalNormalizedPosition = 0;
             else mScroll.verticalNormalizedPosition = 0;
@@ -302,16 +492,40 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
 
         var tContent = mScroll.content.GetComponent<RectTransform>();
 
-        if (mHorizontal)
+        switch (layoutType)
         {
-            tContent.sizeDelta = new Vector2(itemWidgetSize * maxIndex, tContent.sizeDelta.y);
-        }
-        else
-        {
-            tContent.sizeDelta = new Vector2(tContent.sizeDelta.x, itemWidgetSize * maxIndex);
+            case LayoutType.SingleColumn:
+                {
+                    if (mHorizontal)
+                    {
+                        tContent.sizeDelta = new Vector2(itemWidth * maxIndex, tContent.sizeDelta.y);
+                    }
+                    else
+                    {
+                        tContent.sizeDelta = new Vector2(tContent.sizeDelta.x, itemHeight * maxIndex);
+                    }
+                }
+                break;
+            case LayoutType.MultiColumn:
+                {
+                    if (mHorizontal)
+                    {
+                        tContent.sizeDelta = new Vector2(itemWidth * Mathf.CeilToInt((float)maxIndex / columnOrRowCount), tContent.sizeDelta.y);
+                    }
+                    else
+                    {
+                        tContent.sizeDelta = new Vector2(tContent.sizeDelta.x, itemHeight * Mathf.CeilToInt((float)maxIndex / columnOrRowCount));
+                    }
+                }
+                break;
+            default:
+                throw new NotImplementedException("未实现");
         }
     }
 
+    /// <summary>
+    /// 释放资源
+    /// </summary>
     public void Dispose()
     {
         if (mScroll != null) mScroll.onValueChanged.RemoveListener(OnMove);
@@ -324,36 +538,59 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
 }
 
 
+#region 编辑器相关
 #if UNITY_EDITOR
 [CustomEditor(typeof(UIRecycleListForUGUI))]
 class UIRecycleListForUGUIEditor : Editor
 {
-    public override void OnInspectorGUI()
+    SerializedProperty mItemWidthSp;
+    SerializedProperty mItemHeightSp;
+    SerializedProperty mColumnOrRowCountSp;
+    SerializedProperty mCullContentSp;
+    SerializedProperty mHideInactiveSp;
+    ScrollRect mScrollRect;
+    RectTransform mTargetTransfrom;
+
+    void OnEnable()
     {
-        base.OnInspectorGUI();
+        mItemWidthSp = serializedObject.FindProperty("itemWidth");
+        mItemHeightSp = serializedObject.FindProperty("itemHeight");
+        mColumnOrRowCountSp = serializedObject.FindProperty("columnOrRowCount");
+        mCullContentSp = serializedObject.FindProperty("cullContent");
+        mHideInactiveSp = serializedObject.FindProperty("hideInactive");
 
         var tRecycleList = target as UIRecycleListForUGUI;
+        mScrollRect = tRecycleList.transform.parent.parent.parent.GetComponent<ScrollRect>();
+        mTargetTransfrom = tRecycleList.GetComponent<RectTransform>() ?? tRecycleList.gameObject.AddComponent<RectTransform>();
+    }
+
+    public override void OnInspectorGUI()
+    {
+        EditorGUILayout.HelpBox("1、点击“初始化配置”\n2、调整好ItemContainer的Pos", MessageType.Info);
+
+        EditorGUILayout.PropertyField(mColumnOrRowCountSp, new GUIContent(mScrollRect.horizontal ? "Row Count" : "Column Count"));
+        EditorGUILayout.PropertyField(mItemWidthSp, new GUIContent("Item Width"));
+        EditorGUILayout.PropertyField(mItemHeightSp, new GUIContent("Item Height"));
+        EditorGUILayout.PropertyField(mCullContentSp, new GUIContent("Cull Content"));
+        EditorGUILayout.PropertyField(mHideInactiveSp, new GUIContent("Hide Inactive"));
 
         if (GUILayout.Button("初始化配置"))
         {
-            var tScrollRect = tRecycleList.transform.parent.parent.parent.GetComponent<ScrollRect>();
-            var tScrollRectSize = tScrollRect.GetComponent<RectTransform>().sizeDelta;
+            var tScrollRectSize = mScrollRect.GetComponent<RectTransform>().sizeDelta;
 
-            tRecycleList.transform.name = "ItemContainer";
-            var tItemContainer = tRecycleList.GetComponent<RectTransform>() ?? tRecycleList.gameObject.AddComponent<RectTransform>();
-            tItemContainer.anchorMin = new Vector2(0.5F, 1);
-            tItemContainer.anchorMax = new Vector2(0.5F, 1);
-            tItemContainer.pivot = new Vector2(0.5F, 1);
-            tItemContainer.rotation = Quaternion.identity;
-            tItemContainer.localScale = Vector3.one;
-            tItemContainer.localPosition = Vector3.zero;
-            tItemContainer.sizeDelta = tScrollRectSize;
+            mTargetTransfrom.name = "ItemContainer";
+            mTargetTransfrom.anchorMin = new Vector2(0, 1);
+            mTargetTransfrom.anchorMax = new Vector2(0, 1);
+            mTargetTransfrom.pivot = new Vector2(0, 1);
+            mTargetTransfrom.rotation = Quaternion.identity;
+            mTargetTransfrom.localScale = Vector3.one;
+            mTargetTransfrom.sizeDelta = tScrollRectSize;
 
 
-            var tContent = tItemContainer.parent.GetComponent<RectTransform>();
-            tContent.anchorMin = new Vector2(0.5F, 1);
-            tContent.anchorMax = new Vector2(0.5F, 1);
-            tContent.pivot = new Vector2(0.5F, 1);
+            var tContent = mTargetTransfrom.parent.GetComponent<RectTransform>();
+            tContent.anchorMin = new Vector2(0, 1);
+            tContent.anchorMax = new Vector2(0, 1);
+            tContent.pivot = new Vector2(0, 1);
             tContent.rotation = Quaternion.identity;
             tContent.localScale = Vector3.one;
             tContent.localPosition = Vector3.zero;
@@ -369,6 +606,9 @@ class UIRecycleListForUGUIEditor : Editor
             tViewPort.localPosition = Vector3.zero;
             tViewPort.sizeDelta = Vector2.zero;
         }
+
+        serializedObject.ApplyModifiedProperties();
     }
 }
 #endif
+#endregion
