@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -28,11 +28,11 @@ using UnityEditor;
  *  {
  *      //实例化候的GameObject要放到RecycleList的下面
  *      var tGo = Instantiate(xxx);
- *      tGo.transform.parent = mRecycleList.transform;
+ *      tGo.transform.SetParent(mRecycleList.transform);
  *  }
  *  
  *  //绑定回调
- *  mRecycleList.onUpdateItem = OnUpdateItem;
+ *  mRecycleList.OnUpdateItemEvent = OnUpdateItem;
     //传入数据长度刷新界面
  *  mRecycleList.UpdateCount(xxx);
  *  
@@ -155,7 +155,7 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
     {
         if (mTrans && mScroll) return true;
         mTrans = transform;
-        mScroll = gameObject == null ? null : gameObject.GetComponentInParent<ScrollRect>();
+        mScroll = mTrans == null ? null : GetComponentInDisableParent<ScrollRect>(mTrans);
         if (mScroll == null) return false;
         if (mScroll.horizontal) mHorizontal = true;
         else if (mScroll.vertical) mHorizontal = false;
@@ -283,7 +283,7 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
 
                 if (CullContent)
                 {
-                    NGUITools.SetActive(tChild.gameObject, (tDistance > tMin && tDistance < tMax), false);
+                    NGUITools.SetActive(tChild.gameObject, i < mMaxIndex && tDistance > tMin && tDistance < tMax, false);
                 }
             }
         }
@@ -327,7 +327,7 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
 
                 if (CullContent)
                 {
-                    NGUITools.SetActive(tChild.gameObject, (tDistance > tMin && tDistance < tMax), false);
+                    NGUITools.SetActive(tChild.gameObject, i < mMaxIndex && tDistance > tMin && tDistance < tMax, false);
                 }
             }
         }
@@ -475,6 +475,13 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
     static public int SortByName(Transform a, Transform b) { return string.Compare(a.name, b.name); }
     static public int SortHorizontal(Transform a, Transform b) { return a.localPosition.x.CompareTo(b.localPosition.x); }
     static public int SortVertical(Transform a, Transform b) { return b.localPosition.y.CompareTo(a.localPosition.y); }
+    static public T GetComponentInDisableParent<T>(Transform tr) where T : class
+    {
+        if (!tr) return default(T);
+        var t = tr.GetComponent<T>();
+        if (t != null) return t;
+        return GetComponentInDisableParent<T>(tr.parent);
+    }
     #endregion
 }
 
