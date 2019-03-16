@@ -111,7 +111,7 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
     protected ScrollRect mScroll;
     protected bool mHorizontal;
     protected bool mFirstTime = true;
-    protected List<Transform> mChildren = new List<Transform>();
+    protected List<Transform> mChildrens = new List<Transform>();
     protected Vector3[] mCorners = new Vector3[4];
     protected int mMinIndex;
     protected int mMaxIndex;
@@ -138,6 +138,7 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
 
     void OnDestroy()
     {
+        if (mScroll != null) mScroll.onValueChanged.RemoveListener(OnMove);
         Dispose();
     }
 
@@ -171,16 +172,16 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
     {
         if (!CacheScrollView()) return;
 
-        mChildren.Clear();
+        mChildrens.Clear();
         for (int i = 0; i < mTrans.childCount; ++i)
         {
             Transform t = mTrans.GetChild(i);
             if (HideInactive && !t.gameObject.activeInHierarchy) continue;
-            mChildren.Add(t);
+            mChildrens.Add(t);
         }
 
-        if (mHorizontal) mChildren.Sort(SortHorizontal);
-        else mChildren.Sort(SortVertical);
+        if (mHorizontal) mChildrens.Sort(SortHorizontal);
+        else mChildrens.Sort(SortVertical);
         ResetChildPositions();
     }
 
@@ -188,15 +189,15 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
     {
         if (!CacheScrollView()) return;
 
-        mChildren.Clear();
+        mChildrens.Clear();
         for (int i = 0; i < mTrans.childCount; ++i)
         {
             Transform t = mTrans.GetChild(i);
             if (HideInactive && !t.gameObject.activeInHierarchy) continue;
-            mChildren.Add(t);
+            mChildrens.Add(t);
         }
 
-        mChildren.Sort(SortByName);
+        mChildrens.Sort(SortByName);
         ResetChildPositions();
     }
     #endregion
@@ -207,9 +208,9 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
     /// </summary>
     void ResetChildPositions()
     {
-        for (int i = 0, imax = mChildren.Count; i < imax; ++i)
+        for (int i = 0, imax = mChildrens.Count; i < imax; ++i)
         {
-            var tTrans = mChildren[i];
+            var tTrans = mChildrens[i];
             switch (layoutType)
             {
                 case LayoutType.SingleColumn:
@@ -240,7 +241,7 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
         }
         var tCenter = Vector3.Lerp(mCorners[0], mCorners[2], 0.5f);
 
-        var tExtents = layoutType == LayoutType.MultiColumn ? (tItemSize * Mathf.CeilToInt(mChildren.Count / (float)ColumnOrRowCount) * 0.5F) : (tItemSize * mChildren.Count * 0.5f);
+        var tExtents = layoutType == LayoutType.MultiColumn ? (tItemSize * Mathf.CeilToInt(mChildrens.Count / (float)ColumnOrRowCount) * 0.5F) : (tItemSize * mChildrens.Count * 0.5f);
         var tExt2 = tExtents * 2f;
 
         if (mHorizontal)
@@ -248,9 +249,9 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
             var tMin = mCorners[0].x - tItemSize;
             var tMax = mCorners[2].x + tItemSize;
 
-            for (int i = 0, imax = mChildren.Count; i < imax; ++i)
+            for (int i = 0, imax = mChildrens.Count; i < imax; ++i)
             {
-                var tChild = mChildren[i];
+                var tChild = mChildrens[i];
                 var tDistance = tChild.localPosition.x - tCenter.x + mScroll.content.localPosition.x;
 
                 if (tDistance < -tExtents)
@@ -292,9 +293,9 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
             var tMin = mCorners[0].y - tItemSize;
             var tMax = mCorners[2].y + tItemSize;
 
-            for (int i = 0, imax = mChildren.Count; i < imax; ++i)
+            for (int i = 0, imax = mChildrens.Count; i < imax; ++i)
             {
-                var tChild = mChildren[i];
+                var tChild = mChildrens[i];
                 var tDistance = tChild.localPosition.y - tCenter.y + mScroll.content.localPosition.y;
 
                 if (tDistance < -tExtents)
@@ -422,12 +423,6 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
         SortBasedOnScrollMovement();
         WrapContent();
 
-        if (pResetPos && mScroll)
-        {
-            if (mHorizontal) mScroll.horizontalNormalizedPosition = 0;
-            else mScroll.verticalNormalizedPosition = 0;
-        }
-
         var tContent = mScroll.content.GetComponent<RectTransform>();
 
         switch (layoutType)
@@ -459,6 +454,11 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
             default:
                 throw new NotImplementedException("未实现");
         }
+
+        if (pResetPos && mScroll)
+        {
+            tContent.anchoredPosition = Vector2.zero;
+        }
     }
 
     /// <summary>
@@ -466,8 +466,12 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
     /// </summary>
     public void Dispose()
     {
-        if (mScroll != null) mScroll.onValueChanged.RemoveListener(OnMove);
         OnUpdateItemEvent = null;
+        mFirstTime = false;
+        mChildrens.Clear();
+        mCorners = new Vector3[4];
+        mMinIndex = 0;
+        mMaxIndex = 0;
     }
     #endregion
 
@@ -507,13 +511,19 @@ class UIRecycleListForUGUIEditor : Editor
         mHideInactiveSp = serializedObject.FindProperty("HideInactive");
 
         var tRecycleList = target as UIRecycleListForUGUI;
-        mScrollRect = tRecycleList.transform.parent.parent.parent.GetComponent<ScrollRect>();
+        mScrollRect = UIRecycleListForUGUI.GetComponentInDisableParent<ScrollRect>(tRecycleList.transform);
         mTargetTransfrom = tRecycleList.GetComponent<RectTransform>() ?? tRecycleList.gameObject.AddComponent<RectTransform>();
     }
 
     public override void OnInspectorGUI()
     {
         EditorGUILayout.HelpBox("1、点击“初始化配置”\n2、调整好ItemContainer的Pos", MessageType.Info);
+
+        if (!mScrollRect)
+        {
+            EditorGUILayout.HelpBox("ScrollRect找不到", MessageType.Error);
+            return;
+        }
 
         EditorGUILayout.PropertyField(mColumnOrRowCountSp, new GUIContent(mScrollRect.horizontal ? "Row Count" : "Column Count"));
         EditorGUILayout.PropertyField(mItemWidthSp, new GUIContent("Item Width"));
