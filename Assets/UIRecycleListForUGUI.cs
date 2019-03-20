@@ -592,7 +592,6 @@ class UIRecycleListForUGUIEditor : Editor
             tContent.sizeDelta = tScrollRectSize;
             tContent.anchoredPosition = Vector3.zero;
 
-            tContent.gameObject.AddMissingComponent<RectTransform>();
             var tComponents = tContent.GetComponents(typeof(Component));
             foreach (var item in tComponents)
             {
