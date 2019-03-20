@@ -103,18 +103,17 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
     /// </summary>
     [Tooltip("是否忽略隐藏的Item")]
     [HideInInspector]
-    public bool HideInactive = false;
+    public bool IgnoreInactive = false;
 
     public OnUpdateItem OnUpdateItemEvent;
 
     protected Transform mTrans;
     protected ScrollRect mScroll;
     protected bool mHorizontal;
-    protected bool mFirstTime = true;
     protected List<Transform> mChildrens = new List<Transform>();
     protected Vector3[] mCorners = new Vector3[4];
-    protected int mMinIndex;
     protected int mMaxIndex;
+    protected int mCurIndex;
 
     /// <summary>
     /// 布局模式
@@ -133,7 +132,6 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
     {
         CacheScrollView();
         if (mScroll != null) mScroll.onValueChanged.AddListener(OnMove);
-        mFirstTime = false;
     }
 
     void OnDestroy()
@@ -144,10 +142,8 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
 
     void OnValidate()
     {
-        if (mMaxIndex < mMinIndex)
-            mMaxIndex = mMinIndex;
-        if (mMinIndex > mMaxIndex)
-            mMaxIndex = mMinIndex;
+        if (mMaxIndex < 0)
+            mMaxIndex = 0;
     }
     #endregion
 
@@ -176,7 +172,7 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
         for (int i = 0; i < mTrans.childCount; ++i)
         {
             Transform t = mTrans.GetChild(i);
-            if (HideInactive && !t.gameObject.activeInHierarchy) continue;
+            if (IgnoreInactive && !t.gameObject.activeInHierarchy) continue;
             mChildrens.Add(t);
         }
 
@@ -193,7 +189,7 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
         for (int i = 0; i < mTrans.childCount; ++i)
         {
             Transform t = mTrans.GetChild(i);
-            if (HideInactive && !t.gameObject.activeInHierarchy) continue;
+            if (IgnoreInactive && !t.gameObject.activeInHierarchy) continue;
             mChildrens.Add(t);
         }
 
@@ -211,13 +207,14 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
         for (int i = 0, imax = mChildrens.Count; i < imax; ++i)
         {
             var tTrans = mChildrens[i];
+            var tIndex = i + mCurIndex;
             switch (layoutType)
             {
                 case LayoutType.SingleColumn:
-                    tTrans.localPosition = mHorizontal ? new Vector3(i * ItemWidth, 0f, 0f) : new Vector3(0f, -i * ItemHeight, 0f);
+                    tTrans.localPosition = mHorizontal ? new Vector3(tIndex * ItemWidth, 0f, 0f) : new Vector3(0f, -tIndex * ItemHeight, 0f);
                     break;
                 case LayoutType.MultiColumn:
-                    tTrans.localPosition = mHorizontal ? new Vector3((i / ColumnOrRowCount) * ItemWidth, -(i % ColumnOrRowCount) * ItemHeight, 0) : new Vector3((i % ColumnOrRowCount) * ItemWidth, -(i / ColumnOrRowCount) * ItemHeight, 0f); ; ;
+                    tTrans.localPosition = mHorizontal ? new Vector3((tIndex / ColumnOrRowCount) * ItemWidth, -(tIndex % ColumnOrRowCount) * ItemHeight, 0) : new Vector3((tIndex % ColumnOrRowCount) * ItemWidth, -(tIndex / ColumnOrRowCount) * ItemHeight, 0f); ; ;
                     break;
                 default:
                     throw new NotImplementedException("未实现");
@@ -252,39 +249,21 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
             for (int i = 0, imax = mChildrens.Count; i < imax; ++i)
             {
                 var tChild = mChildrens[i];
-                var tDistance = tChild.localPosition.x - tCenter.x + mScroll.content.localPosition.x;
+                var tPos = tChild.localPosition;
+                var tDistance = tPos.x - tCenter.x + mScroll.content.localPosition.x + +mTrans.localPosition.x;
+                var tDataIndex = -1;
 
-                if (tDistance < -tExtents)
+                if (tDistance < -tExtents || tDistance > tExtents)
                 {
-                    var tPos = tChild.localPosition;
-                    tPos.x += tExt2;
+                    tPos.x += tDistance < -tExtents ? tExt2 : -tExt2;
                     tDistance = tPos.x - tCenter.x;
-                    var tDataIndex = layoutType == LayoutType.SingleColumn ? Mathf.RoundToInt(tPos.x / tItemSize) : Mathf.RoundToInt(-tPos.y / ItemHeight) + Mathf.RoundToInt(tPos.x / ItemWidth) * ColumnOrRowCount;
-
-                    if (mMinIndex == mMaxIndex || (mMinIndex <= tDataIndex && tDataIndex < mMaxIndex))
-                    {
-                        tChild.localPosition = tPos;
-                        UpdateItem(tChild);
-                    }
+                    tDataIndex = GetIndex(tPos);
                 }
-                else if (tDistance > tExtents)
-                {
-                    var tPos = tChild.localPosition;
-                    tPos.x -= tExt2;
-                    tDistance = tPos.x - tCenter.x;
-                    var tDataIndex = layoutType == LayoutType.SingleColumn ? Mathf.RoundToInt(tPos.x / tItemSize) : Mathf.RoundToInt(-tPos.y / ItemHeight) + Mathf.RoundToInt(tPos.x / ItemWidth) * ColumnOrRowCount;
 
-                    if (mMinIndex == mMaxIndex || (mMinIndex <= tDataIndex && tDataIndex < mMaxIndex))
-                    {
-                        tChild.localPosition = tPos;
-                        UpdateItem(tChild);
-                    }
-                }
-                else if (mFirstTime) UpdateItem(tChild);
-
-                if (CullContent)
+                if (tDataIndex >= 0 && tDataIndex < mMaxIndex)
                 {
-                    NGUITools.SetActive(tChild.gameObject, i < mMaxIndex && tDistance > tMin && tDistance < tMax, false);
+                    tChild.localPosition = tPos;
+                    UpdateItem(tChild);
                 }
             }
         }
@@ -296,39 +275,21 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
             for (int i = 0, imax = mChildrens.Count; i < imax; ++i)
             {
                 var tChild = mChildrens[i];
-                var tDistance = tChild.localPosition.y - tCenter.y + mScroll.content.localPosition.y;
+                var tPos = tChild.localPosition;
+                var tDistance = tPos.y - tCenter.y + mScroll.content.localPosition.y + mTrans.localPosition.y;
+                var tDataIndex = -1;
 
-                if (tDistance < -tExtents)
+                if (tDistance < -tExtents || tDistance > tExtents)
                 {
-                    var tPos = tChild.localPosition;
-                    tPos.y += tExt2;
-                    tDistance = tPos.y - tCenter.y;
-                    var tDataIndex = layoutType == LayoutType.SingleColumn ? Mathf.RoundToInt(tPos.y / -tItemSize) : Mathf.RoundToInt(tPos.x / ItemWidth) + Mathf.RoundToInt(-tPos.y / ItemHeight) * ColumnOrRowCount;
-
-                    if (mMinIndex == mMaxIndex || (mMinIndex <= tDataIndex && tDataIndex < mMaxIndex))
-                    {
-                        tChild.localPosition = tPos;
-                        UpdateItem(tChild);
-                    }
+                    tPos.y += tDistance < -tExtents ? tExt2 : -tExt2;
+                    tDistance = tPos.y - tCenter.y + mScroll.content.localPosition.y + mTrans.localPosition.y;
+                    tDataIndex = GetIndex(tPos);
                 }
-                else if (tDistance > tExtents)
-                {
-                    var tPos = tChild.localPosition;
-                    tPos.y -= tExt2;
-                    tDistance = tPos.y - tCenter.y;
-                    var tDataIndex = layoutType == LayoutType.SingleColumn ? Mathf.RoundToInt(tPos.y / -tItemSize) : Mathf.RoundToInt(tPos.x / ItemWidth) + Mathf.RoundToInt(-tPos.y / ItemHeight) * ColumnOrRowCount;
 
-                    if (mMinIndex == mMaxIndex || (mMinIndex <= tDataIndex && tDataIndex < mMaxIndex))
-                    {
-                        tChild.localPosition = tPos;
-                        UpdateItem(tChild);
-                    }
-                }
-                else if (mFirstTime) UpdateItem(tChild);
-
-                if (CullContent)
+                if (tDataIndex >= 0 && tDataIndex < mMaxIndex)
                 {
-                    NGUITools.SetActive(tChild.gameObject, i < mMaxIndex && tDistance > tMin && tDistance < tMax, false);
+                    tChild.localPosition = tPos;
+                    UpdateItem(tChild);
                 }
             }
         }
@@ -343,26 +304,14 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
     {
         if (OnUpdateItemEvent == null) return;
 
-        int tDataIndex = 0;
-        switch (layoutType)
-        {
-            case LayoutType.SingleColumn:
-                tDataIndex = mHorizontal ? Mathf.RoundToInt(pTrans.localPosition.x / ItemWidth) : Mathf.RoundToInt(pTrans.localPosition.y / -ItemHeight);
-                break;
-            case LayoutType.MultiColumn:
-                if (mHorizontal)
-                {
-                    tDataIndex = Mathf.RoundToInt(-pTrans.localPosition.y / ItemHeight) + Mathf.RoundToInt(pTrans.localPosition.x / ItemWidth) * ColumnOrRowCount;
-                }
-                else
-                {
-                    tDataIndex = Mathf.RoundToInt(pTrans.localPosition.x / ItemWidth) + Mathf.RoundToInt(-pTrans.localPosition.y / ItemHeight) * ColumnOrRowCount;
-                }
-                break;
-            default:
-                throw new NotImplementedException("未实现");
-        }
+        var tDataIndex = GetIndex(pTrans);
+        Debug.Log("UpdateItem:" + tDataIndex.ToString());
         OnUpdateItemEvent(pTrans.gameObject, tDataIndex);
+
+        if (CullContent)
+        {
+            pTrans.gameObject.SetActive(tDataIndex >= 0 && tDataIndex < mMaxIndex);
+        }
     }
 
     /// <summary>
@@ -395,13 +344,13 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
             case LayoutType.MultiColumn:
                 if (mHorizontal)
                 {
-                    //多生成两列
-                    tCount = (Mathf.CeilToInt(tSize.x / ItemWidth) + 2) * ColumnOrRowCount;
+                    //多生成一列
+                    tCount = (Mathf.CeilToInt(tSize.x / ItemWidth) + 1) * ColumnOrRowCount;
                 }
                 else
                 {
-                    //多生成两行
-                    tCount = (Mathf.CeilToInt(tSize.y / ItemHeight) + 2) * ColumnOrRowCount;
+                    //多生成一行
+                    tCount = (Mathf.CeilToInt(tSize.y / ItemHeight) + 1) * ColumnOrRowCount;
                 }
                 break;
             default:
@@ -418,13 +367,33 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
     /// <param name="pResetPos">是否重置ScrollRect的位置</param>
     public void UpdateCount(int pItemCount, bool pResetPos = false)
     {
-        mMinIndex = 0;
+        if (pResetPos)
+        {
+            mCurIndex = 0;
+        }
+        else if (mChildrens.Count > 0)
+        {
+            if (mHorizontal) mChildrens.Sort(SortHorizontal);
+            else mChildrens.Sort(SortVertical);
+            mCurIndex = GetIndex(mChildrens[0].localPosition);
+
+            //当前index超出总数量时，定位到最末尾
+            if (mCurIndex >= pItemCount)
+            {
+                mCurIndex = pItemCount - CalculateInstantiateCount();
+            }
+            //当前index偏移下
+            else if (mMaxIndex > pItemCount)
+            {
+                mCurIndex -= mMaxIndex - pItemCount;
+            }
+
+            if (mCurIndex < 0) mCurIndex = 0;
+        }
+
         mMaxIndex = pItemCount;
-        SortBasedOnScrollMovement();
-        WrapContent();
 
         var tContent = mScroll.content.GetComponent<RectTransform>();
-
         switch (layoutType)
         {
             case LayoutType.SingleColumn:
@@ -455,10 +424,13 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
                 throw new NotImplementedException("未实现");
         }
 
-        if (pResetPos && mScroll)
+        if (pResetPos)
         {
             tContent.anchoredPosition = Vector2.zero;
         }
+
+        SortBasedOnScrollMovement();
+        WrapContent();
     }
 
     /// <summary>
@@ -467,19 +439,86 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
     public void Dispose()
     {
         OnUpdateItemEvent = null;
-        mFirstTime = false;
         mChildrens.Clear();
         mCorners = new Vector3[4];
-        mMinIndex = 0;
         mMaxIndex = 0;
+        mCurIndex = 0;
     }
     #endregion
 
-    #region static method
-    static public int SortByName(Transform a, Transform b) { return string.Compare(a.name, b.name); }
-    static public int SortHorizontal(Transform a, Transform b) { return a.localPosition.x.CompareTo(b.localPosition.x); }
-    static public int SortVertical(Transform a, Transform b) { return b.localPosition.y.CompareTo(a.localPosition.y); }
-    static public T GetComponentInDisableParent<T>(Transform tr) where T : class
+    #region common method
+    int SortByName(Transform a, Transform b) { return string.Compare(a.name, b.name); }
+    int SortHorizontal(Transform a, Transform b)
+    {
+        switch (layoutType)
+        {
+            case LayoutType.SingleColumn:
+                return a.localPosition.x.CompareTo(b.localPosition.x);
+            case LayoutType.MultiColumn:
+                var aIndex = GetIndex(a);
+                var bIndex = GetIndex(b);
+                return aIndex.CompareTo(bIndex);
+            default:
+                throw new NotImplementedException("未实现");
+        }
+    }
+    int SortVertical(Transform a, Transform b)
+    {
+        switch (layoutType)
+        {
+            case LayoutType.SingleColumn:
+                return b.localPosition.y.CompareTo(a.localPosition.y);
+            case LayoutType.MultiColumn:
+                var aIndex = GetIndex(a);
+                var bIndex = GetIndex(b);
+                return aIndex.CompareTo(bIndex);
+            default:
+                throw new NotImplementedException("未实现");
+        }
+    }
+    /// <summary>
+    /// 获取index
+    /// </summary>
+    /// <param name="pTrans"></param>
+    /// <returns></returns>
+    int GetIndex(Transform pTrans)
+    {
+        if (!pTrans) return 0;
+        return GetIndex(pTrans.localPosition);
+    }
+    /// <summary>
+    /// 获取index
+    /// </summary>
+    /// <param name="pPos"></param>
+    /// <returns></returns>
+    int GetIndex(Vector3 pPos)
+    {
+        switch (layoutType)
+        {
+            case LayoutType.SingleColumn:
+                if (mHorizontal)
+                {
+                    return Mathf.RoundToInt(pPos.x / ItemWidth);
+                }
+                else
+                {
+                    return -Mathf.RoundToInt(pPos.y / ItemHeight);
+                }
+            case LayoutType.MultiColumn:
+                if (mHorizontal)
+                {
+                    return Mathf.RoundToInt(-pPos.y / ItemHeight) + Mathf.RoundToInt(pPos.x / ItemWidth) * ColumnOrRowCount;
+                }
+                else
+                {
+                    return Mathf.RoundToInt(pPos.x / ItemWidth) + Mathf.RoundToInt(-pPos.y / ItemHeight) * ColumnOrRowCount;
+                }
+            default:
+                throw new NotImplementedException("未实现");
+        }
+    }
+
+    public T GetComponentInDisableParent<T>(Transform tr) where T : class
     {
         if (!tr) return default(T);
         var t = tr.GetComponent<T>();
@@ -498,7 +537,7 @@ class UIRecycleListForUGUIEditor : Editor
     SerializedProperty mItemHeightSp;
     SerializedProperty mColumnOrRowCountSp;
     SerializedProperty mCullContentSp;
-    SerializedProperty mHideInactiveSp;
+    SerializedProperty mIgnoreInactiveSp;
     ScrollRect mScrollRect;
     RectTransform mTargetTransfrom;
 
@@ -508,10 +547,10 @@ class UIRecycleListForUGUIEditor : Editor
         mItemHeightSp = serializedObject.FindProperty("ItemHeight");
         mColumnOrRowCountSp = serializedObject.FindProperty("ColumnOrRowCount");
         mCullContentSp = serializedObject.FindProperty("CullContent");
-        mHideInactiveSp = serializedObject.FindProperty("HideInactive");
+        mIgnoreInactiveSp = serializedObject.FindProperty("IgnoreInactive");
 
         var tRecycleList = target as UIRecycleListForUGUI;
-        mScrollRect = UIRecycleListForUGUI.GetComponentInDisableParent<ScrollRect>(tRecycleList.transform);
+        mScrollRect = tRecycleList.GetComponentInDisableParent<ScrollRect>(tRecycleList.transform);
         mTargetTransfrom = tRecycleList.GetComponent<RectTransform>() ?? tRecycleList.gameObject.AddComponent<RectTransform>();
     }
 
@@ -529,7 +568,7 @@ class UIRecycleListForUGUIEditor : Editor
         EditorGUILayout.PropertyField(mItemWidthSp, new GUIContent("Item Width"));
         EditorGUILayout.PropertyField(mItemHeightSp, new GUIContent("Item Height"));
         EditorGUILayout.PropertyField(mCullContentSp, new GUIContent("Cull Content"));
-        EditorGUILayout.PropertyField(mHideInactiveSp, new GUIContent("Hide Inactive"));
+        EditorGUILayout.PropertyField(mIgnoreInactiveSp, new GUIContent("Hide Inactive"));
 
         if (GUILayout.Button("初始化配置"))
         {
