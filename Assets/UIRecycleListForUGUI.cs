@@ -131,12 +131,48 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
     void Start()
     {
         CacheScrollView();
-        if (mScroll != null) mScroll.onValueChanged.AddListener(OnMove);
+        if (mScroll != null)
+        {
+            mScroll.onValueChanged.AddListener(OnMove);
+
+            if (mHorizontal)
+            {
+                if (mScroll.horizontalScrollbar)
+                {
+                    mScroll.horizontalScrollbar.onValueChanged.AddListener(OnScroll);
+                }
+            }
+            else
+            {
+                if (mScroll.verticalScrollbar)
+                {
+                    mScroll.verticalScrollbar.onValueChanged.AddListener(OnScroll);
+                }
+            }
+        }
     }
 
     void OnDestroy()
     {
-        if (mScroll != null) mScroll.onValueChanged.RemoveListener(OnMove);
+        if (mScroll != null)
+        {
+            mScroll.onValueChanged.RemoveListener(OnMove);
+
+            if (mHorizontal)
+            {
+                if (mScroll.horizontalScrollbar)
+                {
+                    mScroll.horizontalScrollbar.onValueChanged.RemoveListener(OnScroll);
+                }
+            }
+            else
+            {
+                if (mScroll.verticalScrollbar)
+                {
+                    mScroll.verticalScrollbar.onValueChanged.RemoveListener(OnScroll);
+                }
+            }
+        }
         Dispose();
     }
 
@@ -161,6 +197,7 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
     }
 
     void OnMove(Vector2 delta) { WrapContent(); }
+    void OnScroll(float delta) { WrapContent(); }
     #endregion
 
     #region sort method
@@ -243,20 +280,23 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
 
         if (mHorizontal)
         {
-            var tMin = mCorners[0].x - tItemSize;
-            var tMax = mCorners[2].x + tItemSize;
-
             for (int i = 0, imax = mChildrens.Count; i < imax; ++i)
             {
                 var tChild = mChildrens[i];
                 var tPos = tChild.localPosition;
                 var tDistance = tPos.x - tCenter.x + mScroll.content.localPosition.x + +mTrans.localPosition.x;
                 var tDataIndex = -1;
+                var hasChange = false;
 
-                if (tDistance < -tExtents || tDistance > tExtents)
+                while (tDistance < -tExtents || tDistance > tExtents)
                 {
+                    hasChange = true;
                     tPos.x += tDistance < -tExtents ? tExt2 : -tExt2;
-                    tDistance = tPos.x - tCenter.x;
+                    tDistance = tPos.x - tCenter.x + mScroll.content.localPosition.x + +mTrans.localPosition.x;
+                }
+
+                if (hasChange)
+                {
                     tDataIndex = GetIndex(tPos);
                 }
 
@@ -269,20 +309,23 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
         }
         else
         {
-            var tMin = mCorners[0].y - tItemSize;
-            var tMax = mCorners[2].y + tItemSize;
-
             for (int i = 0, imax = mChildrens.Count; i < imax; ++i)
             {
                 var tChild = mChildrens[i];
                 var tPos = tChild.localPosition;
-                var tDistance = tPos.y - tCenter.y + mScroll.content.localPosition.y + mTrans.localPosition.y;
                 var tDataIndex = -1;
+                var tDistance = tPos.y - tCenter.y + mScroll.content.localPosition.y + mTrans.localPosition.y;
+                var hasChange = false;
 
-                if (tDistance < -tExtents || tDistance > tExtents)
+                while (tDistance < -tExtents || tDistance > tExtents)
                 {
+                    hasChange = true;
                     tPos.y += tDistance < -tExtents ? tExt2 : -tExt2;
                     tDistance = tPos.y - tCenter.y + mScroll.content.localPosition.y + mTrans.localPosition.y;
+                }
+
+                if (hasChange)
+                {
                     tDataIndex = GetIndex(tPos);
                 }
 
@@ -305,7 +348,6 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
         if (OnUpdateItemEvent == null) return;
 
         var tDataIndex = GetIndex(pTrans);
-        Debug.Log("UpdateItem:" + tDataIndex.ToString());
         OnUpdateItemEvent(pTrans.gameObject, tDataIndex);
 
         if (CullContent)
