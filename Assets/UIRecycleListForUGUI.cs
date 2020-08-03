@@ -41,6 +41,9 @@ using UnityEditor;
  *  {
  *     //在这里对pGameObject赋值
  *  }
+ *  
+ *  //移动到指定索引项
+ *  mRecycleList.MoveToIndex(0)
  * 
  */
 
@@ -266,6 +269,11 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
     void WrapContent()
     {
         var tItemSize = mHorizontal ? ItemWidth : ItemHeight;
+        if (tItemSize <= 0)
+        {
+            throw new Exception("Item宽高值不能小于0");
+        }
+
         mScroll.viewport.GetWorldCorners(mCorners);
         for (int i = 0; i < 4; ++i)
         {
@@ -476,6 +484,50 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
     }
 
     /// <summary>
+    /// 移动到指定的索引项
+    /// </summary>
+    /// <param name="index"></param>
+    public void MoveToIndex(int index)
+    {
+        if (index < 0 || index >= mMaxIndex)
+            return;
+
+        var tContent = mScroll.content.GetComponent<RectTransform>();
+        var tPos = tContent.anchoredPosition;
+
+        switch (layoutType)
+        {
+            case LayoutType.SingleColumn:
+                if (mHorizontal)
+                {
+                    tPos.x = -Mathf.RoundToInt(index * ItemWidth);
+                }
+                else
+                {
+                    tPos.y = Mathf.RoundToInt(index * ItemHeight);
+                }
+                break;
+            case LayoutType.MultiColumn:
+                if (mHorizontal)
+                {
+                    index = Mathf.FloorToInt(index / ColumnOrRowCount);
+                    tPos.x = -Mathf.RoundToInt(index * ItemWidth);
+                }
+                else
+                {
+                    index = Mathf.FloorToInt(index / ColumnOrRowCount);
+                    tPos.y = Mathf.RoundToInt(index * ItemHeight);
+                }
+                break;
+            default:
+                throw new NotImplementedException("未实现");
+        }
+
+        tContent.anchoredPosition = tPos;
+        WrapContent();
+    }
+
+    /// <summary>
     /// 释放资源
     /// </summary>
     public void Dispose()
@@ -575,25 +627,25 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
 [CustomEditor(typeof(UIRecycleListForUGUI))]
 class UIRecycleListForUGUIEditor : Editor
 {
-    SerializedProperty mItemWidthSp;
-    SerializedProperty mItemHeightSp;
     SerializedProperty mColumnOrRowCountSp;
     SerializedProperty mCullContentSp;
     SerializedProperty mIgnoreInactiveSp;
+
+    UIRecycleListForUGUI m_UIRecycleList;
     ScrollRect mScrollRect;
     RectTransform mTargetTransfrom;
 
+    int mIndex;
+
     void OnEnable()
     {
-        mItemWidthSp = serializedObject.FindProperty("ItemWidth");
-        mItemHeightSp = serializedObject.FindProperty("ItemHeight");
         mColumnOrRowCountSp = serializedObject.FindProperty("ColumnOrRowCount");
         mCullContentSp = serializedObject.FindProperty("CullContent");
         mIgnoreInactiveSp = serializedObject.FindProperty("IgnoreInactive");
 
-        var tRecycleList = target as UIRecycleListForUGUI;
-        mScrollRect = tRecycleList.GetComponentInDisableParent<ScrollRect>(tRecycleList.transform);
-        mTargetTransfrom = tRecycleList.GetComponent<RectTransform>() ?? tRecycleList.gameObject.AddComponent<RectTransform>();
+        m_UIRecycleList = target as UIRecycleListForUGUI;
+        mScrollRect = m_UIRecycleList.GetComponentInDisableParent<ScrollRect>(m_UIRecycleList.transform);
+        mTargetTransfrom = m_UIRecycleList.GetComponent<RectTransform>() ?? m_UIRecycleList.gameObject.AddComponent<RectTransform>();
     }
 
     public override void OnInspectorGUI()
@@ -607,8 +659,8 @@ class UIRecycleListForUGUIEditor : Editor
         }
 
         EditorGUILayout.PropertyField(mColumnOrRowCountSp, new GUIContent(mScrollRect.horizontal ? "Row Count" : "Column Count"));
-        EditorGUILayout.PropertyField(mItemWidthSp, new GUIContent("Item Width"));
-        EditorGUILayout.PropertyField(mItemHeightSp, new GUIContent("Item Height"));
+        m_UIRecycleList.ItemWidth = Mathf.FloorToInt(EditorGUILayout.FloatField(new GUIContent("ItemWidth", "Item的宽度（包含间隔）"), m_UIRecycleList.ItemWidth));
+        m_UIRecycleList.ItemHeight = Mathf.FloorToInt(EditorGUILayout.FloatField(new GUIContent("ItemHeight", "Item的高度（包含间隔）"), m_UIRecycleList.ItemHeight));
         EditorGUILayout.PropertyField(mCullContentSp, new GUIContent("Cull Content"));
         EditorGUILayout.PropertyField(mIgnoreInactiveSp, new GUIContent("Hide Inactive"));
 
@@ -650,6 +702,12 @@ class UIRecycleListForUGUIEditor : Editor
             tViewPort.localScale = Vector3.one;
             tViewPort.anchoredPosition = Vector3.zero;
             tViewPort.sizeDelta = Vector2.zero;
+        }
+
+        mIndex = EditorGUILayout.IntField(mIndex);
+        if (GUILayout.Button("跳转到指定索引项"))
+        {
+            m_UIRecycleList.MoveToIndex(mIndex);
         }
 
         serializedObject.ApplyModifiedProperties();
