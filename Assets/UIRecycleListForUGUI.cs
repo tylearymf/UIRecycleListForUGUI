@@ -375,7 +375,7 @@ public class UIRecycleListForUGUI : MonoBehaviour, IDisposable
             throw new NotImplementedException("获取ScrollRect组件失败");
         }
 
-        var tSize = mScroll.GetComponent<RectTransform>().sizeDelta;
+        var tSize = mScroll.GetComponent<RectTransform>().rect.size;
         var tCount = 0;
 
         switch (layoutType)
